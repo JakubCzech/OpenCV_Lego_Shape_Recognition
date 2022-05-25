@@ -1,30 +1,164 @@
+from tkinter.tix import IMAGE
 from typing_extensions import Self
 import cv2 as cv,cv2
 from os import listdir
+
+from cv2 import imread
 import numpy as np
 import time
+import imutils 
+from scipy.spatial import distance as dist
+from imutils import contours, grab_contours, perspective
+import numpy as np
+import imutils
+import cv2
+from skimage.metrics import structural_similarity as compare_ssim
+
+
+class Element:
+    def __init__(self,w,h,box):
+        self.type = "Element"
+        if 380 <w< 500 and 120<h<180:
+            self.type = "S"
+        if 380 <h< 500 and 120<w<180:
+            self.type = "S"
+        if 240 <w< 280 and 300<h<340:
+            self.type = "A"
+        if 240 <h< 280 and 300<w<340:
+            self.type = "A"
+        self.img = None
+        self.box = box
+    def __str__(self):
+        return "Name: " + self.name + " Color: " + self.color + " Position: " + str(self.position)
+
 class lab:
         
     def __init__(self):
-        self.img_color_list = []
-        self.img_grey_list = []
         self.img_masked = []
-        self.img_masked_gray = []
+        self.elements = []
+        self.marked_img = []
         self.load_images()
        
     def load_images(self):
         for file in listdir("SRC/train"):
             if file.endswith(".jpg"):
-                img_color = cv.imread("SRC/train/" + file)
-                img_grey = cv.imread("SRC/train/" + file, cv.IMREAD_GRAYSCALE)
-                _, thresh1 = cv2.threshold(img_grey, 102, 255, cv2.THRESH_TOZERO)
-                self.img_color_list.append(img_color)
-                self.img_grey_list.append(thresh1)
-                self.img_masked.append(self.get_color_shape(img_color))   
-                self.img_masked_gray.append(cv.cvtColor(self.get_color_shape(img_color),cv.COLOR_BGRA2GRAY))
-   
+                img_color = cv.imread("SRC/train/" + file)  
+                img_masked = self.get_color_shape(img_color)              
+                self.img_masked.append(img_masked)   
+                mark_img , elements =self.create_elements(img_masked)
+                self.marked_img.append(mark_img)
+                self.elements.append(elements)
+
     @staticmethod
-    def resize(image = None,scale_percent :int =20):
+    def create_elements(image):
+        
+        def midpoint(ptA, ptB): return ((ptA[0] + ptB[0]) * 0.5, (ptA[1] + ptB[1]) * 0.5)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (7, 7), 0)
+        edged = cv2.Canny(gray, 50, 100)
+        edged = cv2.dilate(edged, None, iterations=1)
+        edged = cv2.erode(edged, None, iterations=1)
+        cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE)
+        cnts = grab_contours(cnts)
+        (cnts, _) = contours.sort_contours(cnts)
+        orig = image.copy()
+        elements = []
+        shape = imread("2/185.jpg",0)
+
+        def four_point_transform(image, pts):
+
+                (tl, tr, br, bl) = pts
+                widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+                widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+                maxWidth = max(int(widthA), int(widthB))
+                heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+                heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+                maxHeight = max(int(heightA), int(heightB))
+                dst = np.array([
+                    [0, 0],
+                    [maxWidth - 1, 0],
+                    [maxWidth - 1, maxHeight - 1],
+                    [0, maxHeight - 1]], dtype = "float32")
+                M = cv2.getPerspectiveTransform(pts, dst)
+                warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+                return warped
+        for id,c in enumerate(cnts):
+            if cv2.contourArea(c) > 150000 or cv2.contourArea(c) < 10000:
+                continue       
+            box = cv2.minAreaRect(c)
+
+            box = cv2.cv.BoxPoints(box) if imutils.is_cv2() else cv2.boxPoints(box)
+            box = np.array(box, dtype="int")
+            box = perspective.order_points(box)
+            (tl, tr, br, bl) = box
+            img = four_point_transform(orig, box)
+            (tltrX, tltrY) = midpoint(tl, tr)
+            (blbrX, blbrY) = midpoint(bl, br)
+            (tlblX, tlblY) = midpoint(tl, bl)
+            (trbrX, trbrY) = midpoint(tr, br)        
+            dA = dist.euclidean((tltrX, tltrY), (blbrX, blbrY))
+            dB = dist.euclidean((tlblX, tlblY), (trbrX, trbrY))
+            blue_mask = cv.inRange(img, (0,0,0), (0,0,15))
+            width = int(blue_mask.shape[1])
+            height = int(blue_mask.shape[0])
+            dim = (width, height)
+            shape=  cv2.resize(shape, dim, interpolation=cv2.INTER_AREA)
+            (score, diff) = compare_ssim(blue_mask, shape, full=True)
+            cv.imshow(str(diff), shape)
+            cv.imshow(str(score), blue_mask)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
+            black = sum(sum(blue_mask))
+
+
+
+            # compare blue_mask with shape from shapes/
+
+
+            # if dA/dB > 2 or dB/dA > 2:
+                
+            #     if 350 <dA< 550 and 100<dB<200:
+            #         cv2.putText(orig, "S",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            #     elif 350 <dB< 550 and 100<dA<200:
+            #         cv2.putText(orig, "S",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            #     # else:
+            #     #     cv2.putText(orig, "{:.1f}px".format(dA),(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+            #     #     cv2.putText(orig, "{:.1f}px".format(dB),(int(trbrX + 10), int(trbrY)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+            # elif (dA/dB > 6/10 and dA/dB < 15/10) or (dB/dA > 6/10 and dB/dA < 14/10):
+            #     if 200 <dA< 330 and 200<dB<290 and black <20000:
+            #         cv2.putText(orig, "A",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            #     elif 200 <dB< 330 and 200<dA<290 and black <20000:
+            #         cv2.putText(orig, "A",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            #     else :
+            #         cv2.putText(orig, "{:.1f}px".format(black),(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+                    # imshow(str(sum(sum(blue_mask))),blue_mask)
+                    # imwrite(str(sum(sum(blue_mask)))+".jpg",blue_mask)
+                    # cv.waitKey(0)
+                # cv2.putText(orig, "{:.1f}px".format(dA),(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+                # cv2.putText(orig, "{:.1f}px".format(dB),(int(trbrX + 10), int(trbrY)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+
+
+            # elif 240 <dA< 280 and 300<dB<360:
+            #     cv2.putText(orig, "A",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            # elif 240 <dB< 280 and 300<dA<360:
+            #     cv2.putText(orig, "A",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            # elif 160 <dA< 260 and 200<dB<300:
+            #     cv2.putText(orig, "B",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            # elif 160 <dB< 260 and 200<dA<300:
+            #     cv2.putText(orig, "B",(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            # else:
+            #     # cv2.putText(orig, "{:.1f}px".format(dA),(int(tltrX - 15), int(tltrY - 10)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+            #     # cv2.putText(orig, "{:.1f}px".format(dB),(int(trbrX + 10), int(trbrY)), cv2.FONT_HERSHEY_SIMPLEX,2, (255, 255, 255), 2)
+            #     # cv2.drawContours(orig, [box.astype("int")], -1, (0, 255, 0), 2)
+            #     # cv2.line(orig, (int(tltrX), int(tltrY)), (int(blbrX), int(blbrY)),(255, 0, 255), 2)
+            #     # cv2.line(orig, (int(tlblX), int(tlblY)), (int(trbrX), int(trbrY)),(255, 0, 255), 2)
+            #     pass
+            elements.append(Element(dA,dB,box))    
+        return orig ,elements
+
+    @staticmethod
+    def resize(image = None,scale_percent :int =30):
         """
         
         :param scale_percent:
@@ -39,180 +173,46 @@ class lab:
     
     @staticmethod
     def get_color_shape(image):
-        frame_HSV = cv.cvtColor(image, cv.COLOR_BGR2HSV)
-        frame_threshold = cv.inRange(frame_HSV, (0, 0, 0), (180, 107, 255))
-        frame_threshold = cv.bitwise_not(frame_threshold)
-        img = cv.bitwise_and(image, image, mask=frame_threshold)
- 
-        return img
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        white = cv2.inRange(hsv, (27,0,172), (127,51,255))
+        yellow_green_red_blue = cv2.inRange(hsv, (0,90,0), (179,255,255))
+        masks = yellow_green_red_blue + white
+        return cv2.bitwise_and(image,image, mask= masks)
 
-    @staticmethod
-    def get_edges(image):
-        return cv.Canny(image,310,181)
 
-    def show_masked(self):
-        window_name = "Image after masked"
+    def new_(self):
+        window_name = "New"
         cv.namedWindow(window_name)
-        cv.createTrackbar('Image', window_name, 0, len(self.img_grey_list)-1, lambda x: x)
+        cv.createTrackbar('Image', window_name, 0, len(self.elements)-1, lambda x: x)
         image_num = 1
         while True:
             img_color = self.img_masked[image_num]
-            img_ori = self.img_color_list[image_num]
-            cv.imshow(window_name, self.resize(img_color))
-            cv.imshow("Original", self.resize(img_ori))
+            img_marked = self.marked_img[image_num]
+            elements = self.elements[image_num]
+            cv2.imshow(window_name,np.hstack((self.resize(img_marked), self.resize(img_color))))
+            counter = 0
+            counter1 = 0
+
+            for e in elements:
+                if e.type == "S":
+                    counter+=1
+                if e.type == "A":
+                    counter1+=1
+            print(f'S {counter} A = {counter1}')
             image_num = cv.getTrackbarPos('Image', window_name)
             key_code = cv.waitKey(10)
+
             if key_code == 27:
                 break
 
         cv.destroyAllWindows()
         return
 
-
-    def tuning(self):
-        window_name = "tuning"
-        cv.namedWindow(window_name)
-        cv.createTrackbar('Image', window_name, 0, len(self.img_grey_list)-1, lambda x: x)
-        cv.createTrackbar('Canny_1', window_name, 0, 1000, lambda x: x)
-        cv.createTrackbar('Canny_2', window_name, 0, 1000, lambda x: x)
-        cv.createTrackbar('Erode', window_name, 1, 1000, lambda x: x)
-        cv.createTrackbar('Dilatate', window_name, 1, 1000, lambda x: x)
-
-
-        image_num = 1
-        canny_1 = 310
-        canny_2 = 181
-        erode = 1
-        dilatate = 1
-        while True:
-            img = self.img_masked[image_num]
-            img_gray = self.img_masked_gray[image_num]
-            img_ori = self.img_masked[image_num]
-            img_gray = cv.erode(img_gray, np.ones((erode,erode), np.uint8), iterations=2)
-            img_gray = cv.dilate(img_gray, np.ones((dilatate,dilatate), np.uint8))
-            # cv.imshow(window_name, self.resize(cv.Canny(img,canny_1,canny_2)))
-            cv.imshow(window_name, self.resize(img_ori))
-            thresh_platform = cv2.threshold(img_gray, 0, 255, cv2.THRESH_BINARY)[1]
-            apexes = []
-            edges_platfrom = cv2.Canny(thresh_platform, canny_1, canny_2)
-            lines_platform = cv2.HoughLinesP(edges_platfrom, 2, np.pi / 180, 120, minLineLength=erode, maxLineGap=dilatate)
-            tmp = img_ori.copy()
-            # create copy of image
-
-            for line in lines_platform:
-                x1, y1, x2, y2 = line[0]
-                cv2.line(tmp, (x1, y1), (x2, y2), (0, 255, 0), 5)
-
-                apexes.append([x1, y1])
-                apexes.append([x2, y2])
-            cv.imshow("Lines", self.resize(tmp))
-            image_num = cv.getTrackbarPos('Image', window_name)
-            # canny_1 = cv.getTrackbarPos('Canny_1', window_name)
-            # canny_2 = cv.getTrackbarPos('Canny_2', window_name)
-            erode = cv.getTrackbarPos('Erode', window_name)
-            dilatate = cv.getTrackbarPos('Dilatate', window_name)
-
-            key_code = cv.waitKey(10)
-            if key_code == 27:
-                break
-
-        cv.destroyAllWindows()
-        return
-    def mask_tuning(self):
-        import cv2 as cv
-        max_value = 255
-        max_value_H = 360//2
-        low_H = 0
-        high_H = 180
-        low_S = 0
-        high_S = 82
-        low_V = 60
-        high_V = max_value
-        window_capture_name = 'Video Capture'
-        window_detection_name = 'Object Detection'
-        low_H_name = 'Low H'
-        low_S_name = 'Low S'
-        low_V_name = 'Low V'
-        high_H_name = 'High H'
-        high_S_name = 'High S'
-        high_V_name = 'High V'
-        image_num = 0
-        def on_low_H_thresh_trackbar(val):
-            nonlocal low_H
-            nonlocal high_H
-            low_H = val
-            low_H = min(high_H-1, low_H)
-            cv.setTrackbarPos(low_H_name, window_detection_name, low_H)
-        def on_high_H_thresh_trackbar(val):
-            nonlocal low_H
-            nonlocal high_H
-            high_H = val
-            high_H = max(high_H, low_H+1)
-            cv.setTrackbarPos(high_H_name, window_detection_name, high_H)
-        def on_low_S_thresh_trackbar(val):
-            nonlocal low_S
-            nonlocal high_S
-            low_S = val
-            low_S = min(high_S-1, low_S)
-            cv.setTrackbarPos(low_S_name, window_detection_name, low_S)
-        def on_high_S_thresh_trackbar(val):
-            nonlocal low_S
-            nonlocal high_S
-            high_S = val
-            high_S = max(high_S, low_S+1)
-            cv.setTrackbarPos(high_S_name, window_detection_name, high_S)
-        def on_low_V_thresh_trackbar(val):
-            nonlocal low_V
-            nonlocal high_V
-            low_V = val
-            low_V = min(high_V-1, low_V)
-            cv.setTrackbarPos(low_V_name, window_detection_name, low_V)
-        def on_high_V_thresh_trackbar(val):
-            nonlocal low_V
-            nonlocal high_V
-            high_V = val
-            high_V = max(high_V, low_V+1)
-            cv.setTrackbarPos(high_V_name, window_detection_name, high_V)
-        def on_image_num_thresh_trackbar(val):
-            nonlocal image_num
-            image_num = val
-            cv.setTrackbarPos("Image", window_detection_name, image_num)
-        cv.namedWindow(window_capture_name)
-        cv.namedWindow(window_detection_name)
-        cv.createTrackbar(low_H_name, window_detection_name , low_H, max_value_H, on_low_H_thresh_trackbar)
-        cv.createTrackbar(high_H_name, window_detection_name , high_H, max_value_H, on_high_H_thresh_trackbar)
-        cv.createTrackbar(low_S_name, window_detection_name , low_S, max_value, on_low_S_thresh_trackbar)
-        cv.createTrackbar(high_S_name, window_detection_name , high_S, max_value, on_high_S_thresh_trackbar)
-        cv.createTrackbar(low_V_name, window_detection_name , low_V, max_value, on_low_V_thresh_trackbar)
-        cv.createTrackbar(high_V_name, window_detection_name , high_V, max_value, on_high_V_thresh_trackbar)
-        cv.createTrackbar("Image", window_detection_name , 0, len(self.img_color_list)-1, on_image_num_thresh_trackbar)
-
-        while True:           
-            image = self.img_color_list[image_num]
-            width = int(image.shape[1] * 20 / 100)
-            height = int(image.shape[0] * 20 / 100)
-            dim = (width, height)
-            frame = cv.resize(image, dim, interpolation=cv.INTER_AREA)
-            if frame is None:
-                break
-            frame_HSV = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-            frame_threshold = cv.inRange(frame_HSV, (low_H, low_S, low_V), (high_H, high_S, high_V))
-            frame_threshold = cv.bitwise_not(frame_threshold)
-            final = cv.bitwise_and(frame, frame, mask=frame_threshold)
-            
-            cv.imshow(window_capture_name, frame)
-            cv.imshow('Final', final)
-
-            
-            
-
-            key = cv.waitKey(30)
-            if key == ord('q') or key == 27:
-                break
+   
 
 if __name__ == "__main__":
     start_time = time.time()
     win = lab()
     print("--- %s seconds ---" % (time.time() - start_time))
-    win.tuning()
+    win.new_()
    
