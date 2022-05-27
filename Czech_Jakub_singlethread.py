@@ -1,30 +1,27 @@
 import cv2 as cv
 import numpy as np
-
-
 from threading import Thread
+
 from os import listdir
 from cv2 import imread, imshow, inRange, cvtColor, COLOR_BGR2HSV
 from scipy.spatial import distance
 from imutils import contours, grab_contours, perspective, is_cv2
 from skimage.metrics import structural_similarity 
 from time import time as t_now
-import os
 class ThreadWithReturnValue(Thread):
     def __init__(self, group=None, target=None, name=None,
                  args=(), kwargs={}, Verbose=None):
         Thread.__init__(self, group, target, name, args, kwargs)
         self._return = None
     def run(self):
-        # print(type(self._target))
+        print(type(self._target))
         if self._target is not None:
             self._return = self._target(*self._args,
                                                 **self._kwargs)
     def join(self, *args):
         Thread.join(self, *args)
         return self._return
-max_tmp = 0
-id_tmp = 0
+
 class Project:
 
     def __init__(self):
@@ -34,29 +31,11 @@ class Project:
 
         self.result = {}
         self.marked_img = []
-        threads = []
-        for i in ["A","B","C","D","E"]:
-            threads.append(ThreadWithReturnValue(target=self.load_shapes, args=(i ,)))
-        for thread in threads:
-            thread.start()
-        self.shapes = []
-        for thread in threads:
-            self.shapes.append(thread.join())
 
         self.load_images()
         self.mask_images()
         self.crop_elements()
-    
-    @staticmethod
-    def load_shapes(id):
-        shapes = []
-        
-        for i in range(5):
-
-            img =imread(os.path.join("dane/",str(id),str(i)+".jpg"))
-            shapes.append(img)
-        return shapes
-
+       
     def load_images(self):
         for file in listdir("SRC/train"):
             if file.endswith(".jpg"):
@@ -125,27 +104,9 @@ class Project:
         return cnts
     
     def compare_images(self, img, h, w):
-
-        shapes = [imread("1/7.jpg",0),imread("2/190.jpg",0),imread("3/14.jpg",0),imread("4/26.jpg",0),imread("5/2.jpg",0)]
-        test_first_list = ThreadWithReturnValue(target=self.check_shapes, args=(shapes,img , h ,w ,))
-
-        shapes = [imread("1/18.jpg",0),imread("2/188.jpg",0),imread("3/115.jpg",0),imread("4/144.jpg",0),imread("5/359.jpg",0)]
-        test_second_list = ThreadWithReturnValue(target=self.check_shapes, args=(shapes,img , h ,w ,))
-        
-        test_first_list.start()
-        test_second_list.start()
-
-        id_tmp_1, max_tmp_1 = test_first_list.join()
-        id_tmp_2, max_tmp_2 = test_second_list.join()
-        if max_tmp_1 > max_tmp_2:
-            return id_tmp_1+1, max_tmp_1
-        elif max_tmp_2 > max_tmp_1:
-            return id_tmp_2+1, max_tmp_2
-    
-    def check_shapes(self,shapes, img, h, w):
         max_tmp = 0
         id_tmp = 0
-   
+        shapes = [imread("1/7.jpg",0),imread("2/190.jpg",0),imread("3/14.jpg",0),imread("4/26.jpg",0),imread("5/2.jpg",0)]
         for id, shape in enumerate(shapes):
             score = self.check_shape(img,shape,id)
             if id == 0 and (h/w > 2 or w/h > 2) :
@@ -156,12 +117,46 @@ class Project:
                 score -= 0.7
             
             if score > 0.9:
-                return id, score
+                return id+1, score
             elif score > max_tmp:
                 max_tmp = score
                 id_tmp = id
-        return id_tmp, max_tmp
+        # shapes = [imread("1/7.jpg",0),imread("2/190.jpg",0),imread("3/14.jpg",0),imread("4/26.jpg",0),imread("5/2.jpg",0)]
+        # test_firs_list = ThreadWithReturnValue(target=self.check_shapes, args=(shapes,img , h ,w ,))
+        # test_firs_list.start()
+        # print (test_firs_list.join())
 
+        shapes = [imread("1/18.jpg",0),imread("2/188.jpg",0),imread("3/115.jpg",0),imread("4/144.jpg",0),imread("5/359.jpg",0)]
+        for id, shape in enumerate(shapes):
+            score = self.check_shape(img,shape,id)
+            if id == 0 and (h/w > 2 or w/h > 2) :
+                    score += 0.2
+            if id == 3 and (h/w > 2 or w/h > 2) and score > 0.7:
+                    score -= 0.4
+            if ( id == 0 or id == 3) and (h < 100 or w < 100) and score > 0.7:
+                score -= 0.7
+            
+            if score > 0.9:
+                return id+1, score
+            elif score > max_tmp:
+                max_tmp = score
+                id_tmp = id
+        return id_tmp+1, max_tmp
+    # def check_shapess(self, img, shape, id):
+    #     for id, shape in enumerate(shapes):
+    #         score = self.check_shape(img,shape,id)
+    #         if id == 0 and (h/w > 2 or w/h > 2) :
+    #                 score += 0.2
+    #         if id == 3 and (h/w > 2 or w/h > 2) and score > 0.7:
+    #                 score -= 0.6
+    #         if ( id == 0 or id == 3) and (h < 100 or w < 100) and score > 0.7:
+    #             score -= 0.7
+            
+    #         if score > 0.9:
+    #             return id+1, score
+    #         elif score > max_tmp:
+    #             max_tmp = score
+    #             id_tmp = id
     @staticmethod
     def check_shape(img_ori,shape, id):
         max_score = 0
@@ -232,7 +227,6 @@ class Project:
 
 if __name__ == "__main__":
     start_time = t_now()
-    print("Start time: ", start_time)
     win = Project()
     print("--- %s seconds ---" % (t_now() - start_time))
     # win.new_()
