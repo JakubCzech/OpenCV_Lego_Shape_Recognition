@@ -1,6 +1,7 @@
 import os
 
 import cv2 as cv
+from cv2 import COLOR_BGR2HLS
 import numpy as np
 
 from time import time as t_now
@@ -36,6 +37,8 @@ class Project:
         self.result = {}
 
         threads = [ThreadWithReturnValue(target=self.load_shapes, args=(i ,)) for i in ["A","B","C","D","E"]]
+        # threads = [ThreadWithReturnValue(target=self.load_shapes, args=(i ,)) for i in ["A","B"]]
+
         _ = [thread.start() for thread in threads]
         self.shapes = [thread.join() for thread in threads]
         self.load_images()
@@ -57,10 +60,18 @@ class Project:
                 continue
             img = image.copy()
             hsv = cvtColor(img, COLOR_BGR2HSV)
-            white = inRange(hsv, (27,0,172), (127,51,255))
-            yellow_green_red_blue = inRange(hsv, (0,90,0), (179,255,255))
-            masks = yellow_green_red_blue + white
+            hls = cvtColor(img, COLOR_BGR2HLS)
+
+            # white = inRange(hsv, (27,0,172), (127,51,255))
+            white1 = inRange(hsv, (7,0,170), (255,255,189))
+
+            # yellow_green_red_blue = inRange(hsv, (0,90,0), (179,255,255))
+            colors = inRange(hls, (0,57,0), (255,232,68))
+            green = inRange(hls, (34,0,0), (131,93,255))
+            colors = 255 - colors
+            masks = colors + green +white1
             final = bitwise_and(img,img, mask= masks)
+            # save image with hour
             self.images[image_path.name] = (image, final)
     
     def crop_elements(self):
@@ -89,7 +100,10 @@ class Project:
                         res_tmp[shape] = 1
                     else:
                         res_tmp[shape] = res_tmp[shape]+1
+
                     cv.putText(self.images[img][0], str(shape),(int(tltrX - 15), int(tltrY - 10)), cv.FONT_HERSHEY_SIMPLEX,5, (255, 255, 255), 2)
+            cv.imwrite(f'{img}_{t_now()}.jpg', self.images[img][0])
+
             self.result[img] = res_tmp
     
     def compare_images(self, img, h, w):   

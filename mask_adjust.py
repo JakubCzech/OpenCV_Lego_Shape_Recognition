@@ -31,20 +31,20 @@ class Project:
         return cv.resize(img_color, dim, interpolation=cv.INTER_AREA)
     
     def new_(self):
-        images = [self.resize(img)for img in self.images.values()]
+        images = [img for img in self.images.values()]
         
         window_name = "Test"               
         cv.namedWindow(window_name)
         cv.createTrackbar('Image', window_name, 0, len(self.images)-1, lambda x: x)
-        cv.createTrackbar('HMin', window_name, 0, 179, lambda x: x)
+        cv.createTrackbar('HMin', window_name, 0, 255, lambda x: x)
         cv.createTrackbar('SMin', window_name, 0, 255, lambda x: x)
         cv.createTrackbar('VMin', window_name, 0, 255, lambda x: x)
-        cv.createTrackbar('HMax', window_name, 0, 179, lambda x: x)
+        cv.createTrackbar('HMax', window_name, 0, 255, lambda x: x)
         cv.createTrackbar('SMax', window_name, 0, 255, lambda x: x)
         cv.createTrackbar('VMax', window_name, 0, 255, lambda x: x)
 
         # Set default value for Max HSV trackbars
-        cv.setTrackbarPos('HMax', window_name, 179)
+        cv.setTrackbarPos('HMax', window_name, 255)
         cv.setTrackbarPos('SMax', window_name, 255)
         cv.setTrackbarPos('VMax', window_name, 255)
 
@@ -56,8 +56,7 @@ class Project:
 
         while(1):
             img_color = images[image_num] 
-
-
+           
             # Get current positions of all trackbars
             hMin = cv.getTrackbarPos('HMin', window_name)
             sMin = cv.getTrackbarPos('SMin', window_name)
@@ -70,11 +69,22 @@ class Project:
             # Set minimum and maximum HSV values to display
             lower = np.array([hMin, sMin, vMin])
             upper = np.array([hMax, sMax, vMax])
+            img = img_color.copy()
+            hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+            hls = cv.cvtColor(img, cv.COLOR_BGR2HLS)
 
-            # Convert to HSV format and color threshold
-            hsv = cv.cvtColor(img_color, cv.COLOR_BGR2HSV)
+            # white = cv.inRange(hsv, (27,0,172), (127,51,255))
+            # yellow_green_red_blue = inRange(hsv, (0,90,0), (179,255,255))
+            colors = cv.inRange(hls, (0,57,0), (255,232,68))
+            green = cv.inRange(hls, (34,0,0), (131,93,255))
+            colors = 255 - colors
+            # hsv = cv.cvtColor(img_color, cv.COLOR_BGR2HSV)
             mask = cv.inRange(hsv, lower, upper)
-            result = cv.bitwise_and(img_color, img_color, mask=mask)
+            # mask = 255 - mask
+            # masks = colors + white + green
+            masks = colors + green + mask
+
+            result = cv.bitwise_and(img_color, img_color, mask=masks)
 
             # Print if there is a change in HSV value
             if((phMin != hMin) | (psMin != sMin) | (pvMin != vMin) | (phMax != hMax) | (psMax != sMax) | (pvMax != vMax) ):
@@ -87,17 +97,8 @@ class Project:
                 pvMax = vMax
 
             # Display result img_color
-            cv.imshow(window_name, result)
-            hsv = cv.cvtColor(img_color, cv.COLOR_BGR2HSV)
-            # white = inRange(hsv, (27,0,172), (127,51,255))
-            # yellow_green_red_blue = inRange(hsv, (0,90,0), (179,255,255))
-            yellow_green_red_blue = cv.inRange(hsv, (0,0,0), (179,96,216))
-
-            # masks = yellow_green_red_blue + white
-            # final = bitwise_and(img,img, mask= masks)
-            final = cv.bitwise_and(img_color,img_color, mask= yellow_green_red_blue)
-            cv.imshow("final", final)
-            if cv.waitKey(1000) & 0xFF == ord('q'):
+            cv.imshow(window_name, np.hstack([self.resize(img_color,20), self.resize(result,20)]))
+            if cv.waitKey(10) & 0xFF == ord('q'):
                 break
 
 cv.destroyAllWindows()
