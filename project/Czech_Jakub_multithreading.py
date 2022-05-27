@@ -1,13 +1,15 @@
 import cv2 as cv
 import numpy as np
-from threading import Thread
 
+
+from threading import Thread
 from os import listdir
 from cv2 import imread, imshow, inRange, cvtColor, COLOR_BGR2HSV
 from scipy.spatial import distance
 from imutils import contours, grab_contours, perspective, is_cv2
 from skimage.metrics import structural_similarity 
 from time import time as t_now
+import os
 class ThreadWithReturnValue(Thread):
     def __init__(self, group=None, target=None, name=None,
                  args=(), kwargs={}, Verbose=None):
@@ -32,11 +34,29 @@ class Project:
 
         self.result = {}
         self.marked_img = []
+        threads = []
+        for i in ["A","B","C","D","E"]:
+            threads.append(ThreadWithReturnValue(target=self.load_shapes, args=(i ,)))
+        for thread in threads:
+            thread.start()
+        self.shapes = []
+        for thread in threads:
+            self.shapes.append(thread.join())
 
         self.load_images()
         self.mask_images()
         self.crop_elements()
-       
+    
+    @staticmethod
+    def load_shapes(id):
+        shapes = []
+        
+        for i in range(5):
+
+            img =imread(os.path.join("dane/",str(id),str(i)+".jpg"))
+            shapes.append(img)
+        return shapes
+
     def load_images(self):
         for file in listdir("SRC/train"):
             if file.endswith(".jpg"):
@@ -140,7 +160,8 @@ class Project:
             elif score > max_tmp:
                 max_tmp = score
                 id_tmp = id
-            return id_tmp, max_tmp
+        return id_tmp, max_tmp
+
     @staticmethod
     def check_shape(img_ori,shape, id):
         max_score = 0
