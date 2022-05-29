@@ -13,7 +13,15 @@ def main():
 
     project_instance = Project(images_dir)
     project_instance.save_result(results_file)
-   
+
+# def main_for_testing():
+#     import time 
+#     print("Start")
+#     start = time.time()
+#     project_instance = Project(Path("train"))
+#     project_instance.save_result(Path("results.json"))  
+#     print(time.time() - start)
 
 if __name__ == '__main__':
     main()
+    # main_for_testing()

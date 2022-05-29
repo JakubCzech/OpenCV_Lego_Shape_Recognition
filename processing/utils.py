@@ -24,7 +24,7 @@ class ThreadWithReturnValue(Thread):
 
 class Project:
 
-    def __init__(self, filespath = "train"):
+    def __init__(self, filespath):
         
         self.images = {}
         self.elements = []
@@ -73,6 +73,7 @@ class Project:
                 box = self.get_box(c)    
                 (tl, tr, br, bl) = box
                 img1 = self.four_point_transform(img_tmp, box)
+                img_color = self.four_point_transform(self.images[img][0], box)
 
                 (tltrX, tltrY) = midpoint(tl, tr)
                 (blbrX, blbrY) = midpoint(bl, br)
@@ -84,6 +85,8 @@ class Project:
                 shape, score = self.compare_images(img1,dA,dB)
                 if score > 0.65:
                     res_tmp[shape] += 1
+                    color_id = self.check_color(img_color)
+                    res_tmp[color_id] += 1
             self.result[img] = res_tmp
     
     def compare_images(self, img, h, w):   
@@ -138,6 +141,50 @@ class Project:
             max_score = score
         return max_score
       
+    @staticmethod
+    def check_color(img_color):
+        def check_color(centers):
+            red , green, blue ,yellow , white = 0,0,0,0,0
+            for row in centers:
+                b, g, r  = row
+                if 115 < r < 160 and 40 < g < 95 and 40  < b < 90:
+                    red += 1
+                if 10 < r < 65 and 65 < g < 115 and 50  < b < 90:
+                    green += 1
+                if 145 < r < 190 and 160 < g < 205 and 155  < b < 210:
+                    white +=1
+                if 130 < r < 175 and 120 < g < 155 and 50  < b < 100:
+                    yellow += 1
+                if 25 < r < 90 and 55 < g < 100 and 90  < b < 145:
+                    blue += 1
+
+            if red >= 2 and yellow == 0 and green == 0 and blue == 0 and white == 0:
+                return 5
+            elif green >= 2 and yellow == 0 and red == 0 and blue == 0 and white == 0:
+                return 6
+            elif blue >= 2 and yellow == 0 and green == 0 and red == 0 and white == 0:
+                return 7
+            elif white >= 2 and yellow == 0 and green == 0 and blue == 0 and red == 0:
+                return 8
+            elif yellow >= 2 and green == 0 and blue == 0 and red == 0 and white == 0:
+                return 9
+            elif white == 1 and yellow == 0 and green == 0 and blue == 0 and red == 0:
+                return 8
+            elif blue == 1 and yellow == 0 and green == 0 and white == 0 and red == 0:
+                return 7
+            else:
+                return 10
+
+        height, width, _ = np.shape(img_color)
+        data = np.reshape(img_color, (height * width, 3))
+        data = np.float32(data)
+        number_clusters = 5
+        criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 10, 1.0)
+        flags = cv.KMEANS_RANDOM_CENTERS
+        centers = cv.kmeans(data, number_clusters, None, criteria, 10, flags)[2]
+        return check_color(centers)
+
+
     @staticmethod
     def four_point_transform(image, pts):
         (tl, tr, br, bl) = pts
