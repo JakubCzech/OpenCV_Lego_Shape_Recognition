@@ -1,3 +1,4 @@
+# Author Jakub Czech
 import argparse
 from pathlib import Path
 from processing.utils import Project
